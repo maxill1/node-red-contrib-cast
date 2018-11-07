@@ -174,10 +174,9 @@ Configuration posibilities:<br>
 
 Options for the incomming message object:
 
-- **IP**, `msg.url` or `msg.payload.url` the IP address of the device to cast the media. Could also be defined in the configuration of the node.
+- **IP**, `msg.ip` or `msg.payload.ip` the IP address of the device to cast the media. Could also be defined in the configuration of the node.
 - **Port**, `msg.port` or `msg.payload.port` the port of the device (if not given default <code>8009</code> will be used).
-- **Media Url**, `msg.url` or `msg.payload.url` url to a media file which should be cast to the cast device. For a chromecast this chould be a media or a viideo file. For a Google Home device without a display this could only a audio file.
-- **Media Type**, `msg.contentType` or `msg.payload.contentType` the content type (mime type) of the file in the url. This property is required if a url is given. Could also be defined in the configuration of the node.
+- **Media Url**, `msg.url` or `msg.payload.url` url to a media file which should be cast to the cast device. For a chromecast this chould be a media or a viideo file. For a Google Home device without a display this could only a audio file. Can be an array of url.
 - **Media Type**, `msg.contentType` or `msg.payload.contentType` the content type (mime type) of the file in the url. This property is required if a url is given. Could also be defined in the configuration of the node.
 - **Image Url**, `msg.imageUrl` or `msg.payload.imageUrl` url to a image file which represents the artwork for the url which should be cast to the cast device. For a chromecast this should be an image file. For a Google Home device without a display this is irrelevant.
 - **Message**, `msg.message` or `msg.payload.message` a text which should be send to the google tts engine to convert to a mp3 file.
