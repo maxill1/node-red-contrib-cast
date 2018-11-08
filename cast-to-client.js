@@ -103,8 +103,39 @@ const getSpeechUrl = function (node, text, language, options, callback) {
 const doCast = function (node, media, options, callbackResult) {
     var client = new Client();
 
+
+    const toNodeStatus = function(status, message, fill){
+
+        if(status.playerState){
+          var state, content, type;
+          state = status.playerState?status.playerState.toLowerCase():'';
+          content = status.media?status.media.contentType:'';
+          if(status.items && status.items.length > 1){
+            type = "list";
+          }else{
+            type = "url";
+          }
+          message = state+ ' (' + content + ') ['+type+']';
+          fill = 'green';
+        }else{
+          fill = 'yellow';
+          node.log("STATUS: "+JSON.stringify(status));
+        }
+
+        if(!message){
+           message = 'idle';
+        }
+
+        node.status({
+            fill: fill,
+            shape: 'dot',
+            text: message
+        });
+    };
+
     const onStatus = function (status) {
         if (node) {
+
             node.send([null, {
                 payload: status,
                 type: 'status',
@@ -114,7 +145,7 @@ const doCast = function (node, media, options, callbackResult) {
     };
     const onClose = function () {
         if (node) {
-            node.debug('Player Close');
+            node.info('Player Close');
         }
         client.close();
         /*reconnect(function(newclient, newplayer) {
@@ -260,13 +291,23 @@ status of a playing audio stream:
                                 node.debug('do get Status from player');
                             }
                             client.getStatus(function (err, status) {
+                                //this will send out both status: client and player
+                                player.getStatus(function (err, status) {
+                                  node.log(JSON.stringify(status));
+                                    if (err) {
+                                        errorHandler(node, err, 'Not able to get status');
+                                    } else {
+                                        callbackResult(status, options);
+                                    }
+                                    client.close();
+                                });
                                 if (err) {
                                     errorHandler(node, err, 'Not able to get status');
                                 } else {
                                     callbackResult(status, options);
                                 }
-                                client.close();
                             });
+
                         }
                     });
                 } catch (err) {
@@ -289,6 +330,10 @@ status of a playing audio stream:
                 if (node) {
                     node.debug('experimental implementation playing youtube videos media=\'' + JSON.stringify(media) + '\'');
                 }
+
+                player.on('status', toNodeStatus);
+                player.on('close', toNodeStatus);
+
                 player.load(media.contentId, (err) => {
                     if (err) {
                         errorHandler(node, err, 'Not able to load youtube video', 'error load youtube video');
@@ -328,6 +373,9 @@ status of a playing audio stream:
                     }
 
                     addGenericMetadata(media);
+
+                    player.on('status', toNodeStatus);
+                    player.on('close', toNodeStatus);
 
                     player.load(media, {
                         autoplay: true
@@ -378,10 +426,6 @@ status of a playing audio stream:
                 errorHandler(node, err, 'Not able to launch DefaultMediaReceiver');
             }
 
-           player.on('status', function(status) {
-               node.debug('QUEUE STATUS '+ JSON.stringify(status) );
-           });
-
             try {
                 checkOptions(options);
 
@@ -398,6 +442,9 @@ status of a playing audio stream:
                    for (var i = 0; i < media.mediaList.length; i++) {
                      addGenericMetadata(media.mediaList[i].media, media.imageUrl);
                    }
+
+                   player.on('status', toNodeStatus);
+                   player.on('close', toNodeStatus);
 
                    player.queueLoad(
                      media.mediaList,
@@ -771,9 +818,9 @@ module.exports = function (RED) {
                 if (data.media) {
                     this.debug('initialize playing on ip=\'' + data.ip + '\'');
                     this.status({
-                        fill: 'green',
+                        fill: 'yellow',
                         shape: 'dot',
-                        text: 'play (' + data.contentType + ') on ' + data.ip + ' [url]'
+                        text: 'preparing (' + (data.isList?'list':data.contentType) + ') to ' + data.ip + ' [url]'
                     });
 
                     doCast(this, data.media, data, (res, data2) => {
@@ -797,11 +844,6 @@ module.exports = function (RED) {
                             }, data2.delay, data2);
                             return null;
                         }
-                        this.status({
-                            fill: 'green',
-                            shape: 'dot',
-                            text: 'ok'
-                        });
                         this.send(msg);
                     });
                     return null;
@@ -813,7 +855,7 @@ module.exports = function (RED) {
                     this.status({
                         fill: 'green',
                         shape: 'ring',
-                        text: 'play message on ' + data.ip
+                        text: 'preparing message on ' + data.ip
                     });
                     getSpeechUrl(this, data.message, data.language, data, (sres) => {
                         msg.payload = sres;
