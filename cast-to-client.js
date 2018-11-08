@@ -51,62 +51,21 @@ const errorHandler = function (node, err, messageText, stateText) {
     return false;
 };
 
-const getContentType = function(data, node, fileName){
-  //node property wins!
-  if(data.contentType){
-    return data.contentType;
-  }
-
-  if(!fileName){
-    fileName = data.url;
-  }
-
-  var contentType;
-  if(fileName){
-    var contentTypeMap = {
-      'youtube' : 'youtube/video',
-      'mp3' : 'audio/mp3',
-      'mp4' : 'audio/mp4',
-      'mid' : 'audio/mid',
-      'rmi' : 'audio/mid',
-      'aif' : 'audio/x-aiff',
-      'm3u' : 'audio/x-mpegurl',
-      'ogg' : 'audio/ogg',
-      'wav' : 'audio/vnd.wav',
-      'flv' : 'video/x-flv',
-      'm3u8' : 'application/x-mpegURL',
-      '3gp' : 'video/3gpp',
-      'mov' : 'video/quicktime',
-      'avi' : 'video/x-msvideo',
-      'wmv' : 'video/x-ms-wmv',
-      'ra' : 'audio/vnd.rn-realaudio'
-    };
-
-    var ext = fileName.split('.')[fileName.split('.').length-1];
-    contentType = contentTypeMap[ext];
-    node.debug('contentType for ext '+ext + ' is '+contentType + + '('+fileName+')');
-  }
-  if (!contentType) {
-      node.warn('No contentType given!, using "audio/basic" which is maybe wrong! ('+fileName+')');
-      contentType = 'audio/basic';
-  }
-
-  return contentType;
-};
-
 const addGenericMetadata = function(media, imageUrl, contentTitle){
   if(!contentTitle){
-    //default from url
-    contentTitle = media.contentId;
-    if(contentTitle.indexOf('/') > -1){
-      try {
-        var paths = contentTitle.split('/');
-        if(paths.length>2){
-          paths = paths.slice(paths.length-2,paths.length);
-        }
-        contentTitle = paths.join(' - ');
-      } catch (e) {
+    try {
+      //default from url
+      contentTitle = media.contentId;
+      if(contentTitle.indexOf('/') > -1){
+
+          var paths = contentTitle.split('/');
+          if(paths.length>2){
+            paths = paths.slice(paths.length-2,paths.length);
+          }
+          contentTitle = paths.join(' - ');
+
       }
+    } catch (e) {
     }
   }
   if(!imageUrl){
@@ -448,7 +407,7 @@ status of a playing audio stream:
                      },
                      function(err, status) {
                        node.log("Loaded QUEUE of "+media.mediaList.length+ " items");
-          
+
                        if (err) {
                            errorHandler(node, err, 'Not able to load media', 'error load media');
                        } else if (typeof options.seek !== 'undefined' && !isNaN(options.seek)) {
@@ -531,7 +490,183 @@ status of a playing audio stream:
 module.exports = function (RED) {
     function CastNode(config) {
         RED.nodes.createNode(this, config);
-        //var node = this;
+        const node = this;
+
+        const getContentType = function(data, fileName){
+          try {
+
+            //node property wins!
+            if(data.contentType){
+              return data.contentType;
+            }
+
+            if(!fileName){
+              fileName = data.url;
+            }
+
+            var contentType;
+            if(fileName){
+              var contentTypeMap = {
+                'youtube' : 'youtube/video',
+                'mp3' : 'audio/mp3',
+                'mp4' : 'audio/mp4',
+                'mid' : 'audio/mid',
+                'rmi' : 'audio/mid',
+                'aif' : 'audio/x-aiff',
+                'm3u' : 'audio/x-mpegurl',
+                'ogg' : 'audio/ogg',
+                'wav' : 'audio/vnd.wav',
+                'flv' : 'video/x-flv',
+                'm3u8' : 'application/x-mpegURL',
+                '3gp' : 'video/3gpp',
+                'mov' : 'video/quicktime',
+                'avi' : 'video/x-msvideo',
+                'wmv' : 'video/x-ms-wmv',
+                'ra' : 'audio/vnd.rn-realaudio'
+              };
+
+              var ext = fileName.split('.')[fileName.split('.').length-1];
+              contentType = contentTypeMap[ext];
+              node.debug('contentType for ext '+ext + ' is '+contentType + + '('+fileName+')');
+            }
+            if (!contentType) {
+                node.warn('No contentType given!, using "audio/basic" which is maybe wrong! ('+fileName+')');
+                contentType = 'audio/basic';
+            }
+          } catch (e) {
+            node.log('Error '+e+' getting contentType!, using "audio/basic" which is maybe wrong! ('+fileName+')');
+            contentType = 'audio/basic';
+          }
+          return contentType;
+        };
+
+        const urlListNormalize = function(data){
+          if(Array.isArray(data.url) || Array.isArray(data.urlList)){
+            var list = data.url;
+            //default: msg.url variable (urlList is deprecated)
+            if(!list){
+              list = data.urlList;
+            }
+            //normalize data
+            if(list.length > 1){
+              data.url = list;
+              data.isList = true;
+            }else if(list.length === 1){
+              //plain string
+              data.url = list[0];
+              data.isList = false;
+            }
+            //no need to carry urlList anymore
+            if(data.isList){
+              data.urlList = undefined;
+            }
+          }
+
+          if(data.url  === 'object' && !Array.isArray(data.url)){
+            throw "Invalid url "+data.url;
+          }
+        };
+
+        const addDefaultValues = function(data){
+          if (typeof data.language === 'undefined' || data.language === '') {
+              data.language = 'en';
+          }
+          if (typeof data.volume !== 'undefined' &&
+              !isNaN(data.volume) &&
+              data.volume !== '') {
+              data.volume = parseInt(data.volume) / 100;
+          } else {
+              delete data.volume;
+          }
+          if (typeof data.lowerVolumeLimit !== 'undefined' &&
+              !isNaN(data.lowerVolumeLimit) &&
+              data.lowerVolumeLimit !== '') {
+              data.lowerVolumeLimit = parseInt(data.lowerVolumeLimit) / 100;
+          } else {
+              delete data.lowerVolumeLimit;
+          }
+          if (typeof data.upperVolumeLimit !== 'undefined' &&
+              !isNaN(data.upperVolumeLimit) &&
+              data.upperVolumeLimit !== '') {
+              data.upperVolumeLimit = parseInt(data.upperVolumeLimit) / 100;
+          } else {
+              delete data.upperVolumeLimit;
+          }
+          if (typeof data.delay !== 'undefined' && !isNaN(data.delay) && data.delay !== '') {
+              data.delay = parseInt(data.delay);
+          } else {
+              data.delay = 250;
+          }
+        };
+
+        //media node with all the info about url
+        const createMedia = function(data){
+          var media = {};
+          if (typeof data.url !== 'undefined' &&  data.url != null) {
+              if(!data.isList){
+                //single url
+                node.debug('initialize playing url=\'' + data.url + '\' of contentType=\'' + data.contentType + '\'');
+
+                if (typeof data.contentType !== 'string' || data.contentType == '') {
+                    data.contentType = getContentType(data);
+                }
+                media = {
+                    contentId: data.url,
+                    contentType: data.contentType
+                }
+              }else{
+                //list of urls
+                node.debug('initialize playing queue=\'' + data.url.length );
+
+                media = {}
+                media.mediaList = [];
+
+                var listSize = data.url.length;
+                for (var i = 0; i < listSize; i++) {
+                  var item = data.url[i];
+
+                  var contentType = getContentType(data, item);
+                  var mediaItem = {
+                    autoplay : true,
+                    preloadTime : listSize,
+                    startTime : i+1,
+                    activeTrackIds : [],
+                    playbackDuration: 2,
+                    media: {
+                      contentId: item,
+                      contentType: contentType,
+                      streamType: 'BUFFERED'
+                    }
+                  };
+                  media.mediaList.push(mediaItem);
+                }
+              }
+          }
+
+          if (typeof media === 'object' && media != null) {
+
+              if (typeof data.contentType !== 'undefined' &&
+                  data.contentType != null) {
+                  media.contentType = data.contentType;
+              }
+
+              if (typeof data.streamType !== 'undefined' &&
+                  data.streamType != null) {
+                  media.streamType = data.streamType;
+              }
+
+              if (typeof data.duration !== 'undefined' &&
+                  !isNaN(data.duration)) {
+                  media.duration = data.duration;
+              }
+
+              if (typeof data.imageUrl !== 'undefined' && data.imageUrl != null) {
+                  media.imageUrl = data.imageUrl;
+              }
+          }
+
+          return media;
+        }
 
         this.on('input', function (msg) {
             //-----------------------------------------
@@ -595,112 +730,44 @@ module.exports = function (RED) {
                 }
             }
             //-------------------------------------------------------------------
-            if (typeof data.ip === 'undefined') {
-                this.error('configuraton error: IP is missing!');
-                this.status({
-                    fill: 'red',
-                    shape: 'dot',
-                    text: 'No IP given!'
-                });
-                return;
-            }
-            if (typeof data.language === 'undefined' || data.language === '') {
-                data.language = 'en';
-            }
-            if (typeof data.volume !== 'undefined' &&
-                !isNaN(data.volume) &&
-                data.volume !== '') {
-                data.volume = parseInt(data.volume) / 100;
-            } else {
-                delete data.volume;
-            }
-            if (typeof data.lowerVolumeLimit !== 'undefined' &&
-                !isNaN(data.lowerVolumeLimit) &&
-                data.lowerVolumeLimit !== '') {
-                data.lowerVolumeLimit = parseInt(data.lowerVolumeLimit) / 100;
-            } else {
-                delete data.lowerVolumeLimit;
-            }
-            if (typeof data.upperVolumeLimit !== 'undefined' &&
-                !isNaN(data.upperVolumeLimit) &&
-                data.upperVolumeLimit !== '') {
-                data.upperVolumeLimit = parseInt(data.upperVolumeLimit) / 100;
-            } else {
-                delete data.upperVolumeLimit;
-            }
-            if (typeof data.delay !== 'undefined' && !isNaN(data.delay) && data.delay !== '') {
-                data.delay = parseInt(data.delay);
-            } else {
-                data.delay = 250;
-            }
 
-            if (typeof data.url !== 'undefined' &&
-                data.url != null) {
-                this.debug('initialize playing url=\'' + data.url + '\' of contentType=\'' + data.contentType + '\'');
-
-                if (typeof data.contentType !== 'string' || data.contentType == '') {
-                    data.contentType = getContentType(data, this);
+            //Validating data
+            try {
+                if (typeof data.ip === 'undefined') {
+                    throw 'configuraton error: IP is missing!';
                 }
-                data.media = {
-                    contentId: data.url,
-                    contentType: data.contentType
+                if (data.url && data.urlList) {
+                  throw "You cannot set url and urlList in the same msg!";
                 }
-            }else if (typeof data.urlList !== 'undefined' && data.urlList.length>0) {
-                //if is a list of files
-                this.debug('initialize playing queue=\'' + data.urlList.length );
-
-                data.media = {}
-                data.media.mediaList = [];
-
-                var listSize = data.urlList.length;
-                for (var i = 0; i < listSize; i++) {
-                  var item = data.urlList[i];
-
-                  var contentType = getContentType(data, this, item);
-                  var mediaItem = {
-                    autoplay : true,
-                    preloadTime : listSize,
-                    startTime : i+1,
-                    activeTrackIds : [],
-                    playbackDuration: 2,
-                    media: {
-                      contentId: item,
-                      contentType: contentType,
-                      streamType: 'BUFFERED'
-                    }
-                  };
-                  data.media.mediaList.push(mediaItem);
-                }
+                //accepting array in url too
+                urlListNormalize(data);
+            } catch (e) {
+              this.error(e);
+              this.debug(JSON.stringify(data));
+              this.status({
+                  fill: 'red',
+                  shape: 'dot',
+                  text: e
+              });
+              //bye
+              return;
             }
 
-            if (typeof data.media === 'object' &&
-                data.media != null) {
+            //default varibles
+            addDefaultValues(data);
 
-                if (typeof data.contentType !== 'undefined' &&
-                    data.contentType != null) {
-                    data.media.contentType = data.contentType;
-                }
-
-                if (typeof data.streamType !== 'undefined' &&
-                    data.streamType != null) {
-                    data.media.streamType = data.streamType;
-                }
-
-                if (typeof data.duration !== 'undefined' &&
-                    !isNaN(data.duration)) {
-                    data.media.duration = data.duration;
-                }
-
-                if (typeof data.imageUrl !== 'undefined' && data.imageUrl != null) {
-                    data.media.imageUrl = data.imageUrl;
-                }
+            //creating media object for url/urlList casting
+            if(data.url){
+              data.media = createMedia(data);
             }
 
+            //ready to cast
             try {
                 msg.data = data;
                 this.debug('start playing on cast device');
                 this.debug(JSON.stringify(data));
 
+                //url casting
                 if (data.media) {
                     this.debug('initialize playing on ip=\'' + data.ip + '\'');
                     this.status({
@@ -740,6 +807,7 @@ module.exports = function (RED) {
                     return null;
                 }
 
+                //tts casting
                 if (data.message) {
                     this.debug('initialize getting tts message=\'' + data.message + '\' of language=\'' + data.language + '\'');
                     this.status({
@@ -759,6 +827,7 @@ module.exports = function (RED) {
                     return null;
                 }
 
+                //status
                 this.debug('only sending unspecified request to ip=\'' + data.ip + '\'');
                 this.status({
                     fill: 'yellow',
@@ -775,7 +844,7 @@ module.exports = function (RED) {
                     this.send(msg);
                 });
             } catch (err) {
-                errorHandler(this, err, 'Exception occured on cast media to oputput', 'internal error');
+                errorHandler(this, err, 'Exception occured on cast media to output', 'internal error');
             }
             //this.error("Input parameter wrong or missing. You need to setup (or give in the input message) the 'url' and 'content type' or the 'message' and 'language'!!");
             //this.status({fill:"red",shape:"dot",text:"error - input parameter"});
